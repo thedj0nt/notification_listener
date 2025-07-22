@@ -23,7 +23,7 @@ In your `pubspec.yaml`:
 dependencies:
   smart_notification_listener:
     path: ../smart_notification_listener  # Use path for local testing or replace with Git URL
-
+```
 ---
 
 ## 📱 Android Setup
