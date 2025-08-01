@@ -49,25 +49,10 @@ Inside the <application> tag, add:
 </service>
 ```
 
-# 3. Enable Kotlin (if not already enabled)
-In android/build.gradle:
-
-```gradle
-buildscript {
-    ext.kotlin_version = '1.9.0' // or higher
-    ...
-}
-```
-And in android/app/build.gradle:
-
-```gradle
-apply plugin: 'kotlin-android'
-```
-
 # 3. Enable Kotlin (only if not already enabled)
 Ensure Kotlin is set up in your app. If you're using a recent version of Flutter and the Android Gradle Plugin, Kotlin is likely already enabled.
 
-# A. If using the older Gradle setup (build.gradle):
+A. If using the older Gradle setup (build.gradle):
 ```buildscript {
     ext.kotlin_version = '1.9.0' // Or newer
     dependencies {
@@ -76,7 +61,7 @@ Ensure Kotlin is set up in your app. If you're using a recent version of Flutter
 }
 ```
 
-# B. If using the modern Gradle setup (plugins block):
+B. If using the modern Gradle setup (plugins block):
 Make sure your android/build.gradle or settings.gradle includes:
 
 ```plugins {
