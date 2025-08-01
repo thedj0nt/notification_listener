@@ -172,8 +172,6 @@ class _MyAppState extends State<MyApp> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // Text('Platform Version: $_platformVersion'),
-              // const SizedBox(height: 8),
               Text('Notification Service Running: $_serviceRunning'),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -262,20 +260,18 @@ class _MyAppState extends State<MyApp> {
 }
 ```
 
+## 🛠 Available Methods
 
-🛠 Available Methods
-```
-| Method                           | Description                                           |
-| -------------------------------- | ----------------------------------------------------- |
-| `startNotificationService()`      | Starts the background notification listener            |
-| `stopNotificationService()`       | Stops the service                                     |
-| `isNotificationServiceRunning()`  | Returns whether the service is currently active       |
-| `openNotificationSettings()`      | Opens Android's Notification Listener Settings screen  |
-| `notifications`                   | Stream of received notification events                 |
-| `sendReply({id, message})`       | Sends a reply to the specified notification             |
-```
+| Method                             | Description                                                |
+| ---------------------------------- | ---------------------------------------------------------- |
+| `startNotificationService()`       | Starts the background notification listener service         |
+| `stopNotificationService()`        | Stops the service                                           |
+| `isNotificationServiceRunning()`   | Returns whether the service is currently active             |
+| `openNotificationSettings()`       | Opens Android's Notification Listener Settings screen       |
+| `notifications`                    | Stream of received notification events                      |
+| `sendReply({id, message})`         | Sends a reply to the specified notification                 |
 
-📋 Example Notification Payload
+## 📋 Example Notification Payload
 ```json :
   {
     "id": "com.whatsapp-1698754310000",
