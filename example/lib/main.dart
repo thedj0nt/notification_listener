@@ -14,9 +14,8 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _plugin = SmartNotificationListener();
-  // String _platformVersion = 'Unknown';
   bool _serviceRunning = false;
-  final List<Map<dynamic, dynamic>> _notifications = [];
+  final List<SmartNotification> _notifications = [];
   final Map<String, TextEditingController> _replyControllers = {};
 
   @override
@@ -35,10 +34,8 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _initPlatformState() async {
-    // final version = await _plugin.getPlatformVersion() ?? 'Unknown';
     final isRunning = await _plugin.isNotificationServiceRunning();
     setState(() {
-      // _platformVersion = version;
       _serviceRunning = isRunning;
     });
   }
@@ -129,8 +126,8 @@ class _MyAppState extends State<MyApp> {
                   itemCount: _notifications.length,
                   itemBuilder: (context, index) {
                     final item = _notifications[index];
-                    final String notificationId = item['id'];
-                    if (item['hasReply'] == true) {
+                    final String notificationId = item.id;
+                    if (item.hasReply == true) {
                       final controller = _replyControllers.putIfAbsent(
                         notificationId,
                         () => TextEditingController(),
@@ -140,8 +137,8 @@ class _MyAppState extends State<MyApp> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ListTile(
-                            title: Text(item['package'] ?? 'Unknown App'),
-                            subtitle: Text('${item['title']}: ${item['text']}'),
+                            title: Text(item.package),
+                            subtitle: Text('${item.title}: ${item.text}'),
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -169,8 +166,8 @@ class _MyAppState extends State<MyApp> {
                       );
                     } else {
                       return ListTile(
-                        title: Text(item['package'] ?? 'Unknown App'),
-                        subtitle: Text('${item['title']}: ${item['text']}'),
+                        title: Text(item.package),
+                        subtitle: Text('${item.title}: ${item.text}'),
                       );
                     }
                   },

@@ -114,13 +114,20 @@ class NotificationListener : NotificationListenerService() {
         }
 
         val id = sbn.key
+        // Format post time as UTC ISO 8601
+        val receivedAtFormatted = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.format(java.util.Date(sbn.postTime))
+
         val stored = StoredNotification(
             id = id,
             sbn = sbn,
             packageName = pkg,
             title = title,
             text = text,
-            hasReply = hasReply
+            hasReply = hasReply,
+            receivedAtFormatted = receivedAtFormatted,
+            extraInfo = extras
         )
 
         synchronized(notificationStore) {
@@ -135,7 +142,24 @@ class NotificationListener : NotificationListenerService() {
             "package" to pkg,
             "title" to title,
             "text" to text,
-            "hasReply" to hasReply
+            "hasReply" to hasReply,
+            "receivedAtFormatted" to receivedAtFormatted,
+            // Convert the extras Bundle into a Map<String, String?> where:
+            // - Only keys with values of simple types (String, Int, Boolean, etc.) are kept
+            // - Each value is converted to a string
+            // - Keys with null or unsupported values are filtered out
+            "extras" to extras.keySet().associateWith { key ->
+                val value = extras.get(key)
+                when (value) {
+                    is String,
+                    is CharSequence,
+                    is Int, is Long,
+                    is Boolean,
+                    is Double,
+                    is Float -> value.toString()
+                    else -> null // skip unsupported or complex types
+                }
+            }.filterValues { it != null }  // remove any null values
         )
 
         if (eventSink != null) {
@@ -173,5 +197,7 @@ data class StoredNotification(
     val packageName: String,
     val title: String?,
     val text: String?,
-    val hasReply: Boolean
+    val hasReply: Boolean,
+    val receivedAtFormatted: String,
+    val extraInfo: Bundle
 )

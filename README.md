@@ -33,8 +33,6 @@ In android/app/src/main/AndroidManifest.xml, add the following inside the <manif
 ```xml
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 <uses-permission android:name="android.permission.WAKE_LOCK"/>
-<uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-    tools:ignore="ProtectedPermissions" />
 ```
 
 # 2. Register the service
@@ -66,6 +64,32 @@ And in android/app/build.gradle:
 apply plugin: 'kotlin-android'
 ```
 
+# 3. Enable Kotlin (only if not already enabled)
+Ensure Kotlin is set up in your app. If you're using a recent version of Flutter and the Android Gradle Plugin, Kotlin is likely already enabled.
+
+# A. If using the older Gradle setup (build.gradle):
+```buildscript {
+    ext.kotlin_version = '1.9.0' // Or newer
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+```
+
+# B. If using the modern Gradle setup (plugins block):
+Make sure your android/build.gradle or settings.gradle includes:
+
+```plugins {
+    id 'org.jetbrains.kotlin.android' version '1.9.0' apply false
+}
+```
+And in your app/build.gradle:
+
+```
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+```
+
 
 ## 🧪 Example Usage
 ```dart
@@ -73,75 +97,179 @@ import 'package:flutter/material.dart';
 import 'package:smart_notification_listener/smart_notification_listener.dart';
 
 void main() {
-  runApp(const MyApp());}
+  runApp(const MyApp());
+}
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
   @override
-  State<MyApp> createState() => _MyAppState();}
+  State<MyApp> createState() => _MyAppState();
+}
 
 class _MyAppState extends State<MyApp> {
   final _plugin = SmartNotificationListener();
-  final List<Map<dynamic, dynamic>> _notifications = [];
+  bool _serviceRunning = false;
+  final List<SmartNotification> _notifications = [];
   final Map<String, TextEditingController> _replyControllers = {};
 
   @override
   void initState() {
     super.initState();
-    _plugin.notifications.listen((notification) {
-      setState(() {
-        _notifications.insert(0, notification);
-      })
+    _initPlatformState();
+    _listenToNotifications();
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _replyControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _initPlatformState() async {
+    final isRunning = await _plugin.isNotificationServiceRunning();
+    setState(() {
+      _serviceRunning = isRunning;
     });
   }
 
+  void _listenToNotifications() {
+    _plugin.notifications.listen((notification) {
+      setState(() {
+        _notifications.insert(0, notification);
+      });
+    });
+  }
+
+  Future<void> _openSettings() async {
+    await _plugin.openNotificationSettings();
+  }
+
   Future<void> _sendReply(String id, String message) async {
-    final success = await _plugin.sendReply(id: id, message: message);
+    final success =
+        await _plugin.sendReply(id: id, message: message);
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(success ? "Reply sent!" : "Failed to send reply")),
-    );}
+    );
+  }
+
+  Future<void> _startService() async {
+    final success = await _plugin.startNotificationService();
+    setState(() => _serviceRunning = success);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to start service")),
+      );
+    }
+  }
+
+  Future<void> _stopService() async {
+    final success = await _plugin.stopNotificationService();
+    setState(() => _serviceRunning = !success);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to stop service")),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Smart Notification Listener Example',
       home: Scaffold(
-        appBar: AppBar(title: const Text('Notification Listener')),
-        body: ListView.builder(
-          itemCount: _notifications.length,
-          itemBuilder: (context, index) {
-            final item = _notifications[index];
-            final controller = _replyControllers.putIfAbsent(
-              item['id'],
-              () => TextEditingController(),
-            );
-            return ListTile(
-              title: Text('${item['title']}'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        appBar: AppBar(title: const Text('Smart Notification Listener')),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              // Text('Platform Version: $_platformVersion'),
+              // const SizedBox(height: 8),
+              Text('Notification Service Running: $_serviceRunning'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _openSettings,
+                child: const Text("Open Notification Settings"),
+              ),
+              const SizedBox(height: 16),
+              Row(
                 children: [
-                  Text('${item['text']}'),
-                  if (item['hasReply'] == true)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: controller,
-                            decoration: const InputDecoration(
-                              hintText: 'Type a reply...',
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.send),
-                          onPressed: () => _sendReply(item['id'], controller.text),
-                        ),
-                      ],
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _serviceRunning ? null : _startService,
+                      child: const Text("Start Service"),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _serviceRunning ? _stopService : null,
+                      child: const Text("Stop Service"),
+                    ),
+                  ),
                 ],
               ),
-            );
-          },
+              const Divider(height: 32),
+              const Text("Received Notifications:"),
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _notifications.length,
+                  itemBuilder: (context, index) {
+                    final item = _notifications[index];
+                    final String notificationId = item.id;
+                    if (item.hasReply == true) {
+                      final controller = _replyControllers.putIfAbsent(
+                        notificationId,
+                        () => TextEditingController(),
+                      );
+                      
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ListTile(
+                            title: Text(item.package),
+                            subtitle: Text('${item.title}: ${item.text}'),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: controller,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Type a reply...',
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.send),
+                                  onPressed: () {
+                                    _sendReply(notificationId, controller.text);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(),
+                        ],
+                      );
+                    } else {
+                      return ListTile(
+                        title: Text(item.package),
+                        subtitle: Text('${item.title}: ${item.text}'),
+                      );
+                    }
+                  },
+                ),
+              )
+            ],
+          ),
         ),
       ),
     );
@@ -152,13 +280,14 @@ class _MyAppState extends State<MyApp> {
 
 🛠 Available Methods
 ```
-Method	                          Description
-startNotificationService()	        Starts the foreground notification listener service
-stopNotificationService()	          Stops the service
-isNotificationServiceRunning()	    Returns whether the service is currently running
-openNotificationSettings()	        Opens the Android Notification Listener Settings screen
-notifications	Stream of received notification events
-sendReply({required String id, required String message})	Sends a reply to the given notification
+| Method                           | Description                                           |
+| -------------------------------- | ----------------------------------------------------- |
+| `startNotificationService()`      | Starts the background notification listener            |
+| `stopNotificationService()`       | Stops the service                                     |
+| `isNotificationServiceRunning()`  | Returns whether the service is currently active       |
+| `openNotificationSettings()`      | Opens Android's Notification Listener Settings screen  |
+| `notifications`                   | Stream of received notification events                 |
+| `sendReply({id, message})`       | Sends a reply to the specified notification             |
 ```
 
 📋 Example Notification Payload
@@ -168,6 +297,12 @@ sendReply({required String id, required String message})	Sends a reply to the gi
     "package": "com.whatsapp",
     "title": "John Doe",
     "text": "Hey! How are you?",
-    "hasReply": true
+    "hasReply": true,
+    "receivedAt": "2025-07-31T14:42:30.123Z"
   }
 ```
+
+# 🧠 Notes
+## Works on Android only (API 21+)
+- Notifications must have reply action support to be used with sendReply
+- Ensure notification access is granted manually from device settings
