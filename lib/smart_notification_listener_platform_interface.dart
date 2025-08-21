@@ -17,7 +17,7 @@ abstract class SmartNotificationListenerPlatform extends PlatformInterface {
   }
 
   /// Notification stream of type Map
-  Stream<Map<dynamic, dynamic>> get notifications {
+  Stream<Map> get notifications {
     throw UnimplementedError('notifications has not been implemented.');
   }
 
@@ -46,10 +46,11 @@ abstract class SmartNotificationListenerPlatform extends PlatformInterface {
     throw UnimplementedError('restartNotificationService() has not been implemented.');
   }
 
-  /// Send a reply to a notification (if it supports inline reply)
+  /// Send a reply to a notification (simple)
   Future<bool> sendReply({
     required String id,
     required String message,
+    String? actionKey,
   }) {
     throw UnimplementedError('sendReply() has not been implemented.');
   }

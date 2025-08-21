@@ -5,7 +5,8 @@ import 'smart_notification_listener_platform_interface.dart';
 class MethodChannelSmartNotificationListener
     extends SmartNotificationListenerPlatform {
   @visibleForTesting
-  static const MethodChannel methodChannel = MethodChannel('smart_notification_listener');
+  static const MethodChannel methodChannel =
+      MethodChannel('smart_notification_listener');
 
   static const EventChannel _eventChannel =
       EventChannel('smart_notification_listener_event');
@@ -57,10 +58,12 @@ class MethodChannelSmartNotificationListener
   Future<bool> sendReply({
     required String id,
     required String message,
+    String? actionKey,
   }) async {
     final result = await methodChannel.invokeMethod<bool>('sendReply', {
       'id': id,
       'message': message,
+      if (actionKey != null) 'actionKey': actionKey,
     });
     return result ?? false;
   }

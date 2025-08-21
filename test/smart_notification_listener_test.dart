@@ -6,9 +6,6 @@ class MockSmartNotificationListenerPlatform
     with MockPlatformInterfaceMixin
     implements SmartNotificationListenerPlatform {
   
-  // @override
-  // Future<String?> getPlatformVersion() => Future.value('42');
-
   @override
   Stream<Map<dynamic, dynamic>> get notifications =>
       const Stream.empty(); // return empty stream for test
@@ -22,23 +19,27 @@ class MockSmartNotificationListenerPlatform
   Future<bool> isNotificationServiceRunning() async => true;
 
   @override
-  Future<bool> sendReply({required String id, required String message}) async => true;
-  
-  @override
-  Future<bool> startNotificationService() {
-    // TODO: implement startNotificationService
-    throw UnimplementedError();
+  Future<bool> sendReply({
+    required String id,
+    required String message,
+    String? actionKey,
+  }) async {
+    // For test, always succeed
+    return true;
   }
-  
+
   @override
-  Future<bool> stopNotificationService() {
-    // TODO: implement stopNotificationService
-    throw UnimplementedError();
+  Future<bool> startNotificationService() async {
+    return true; // test stub
   }
-  
+
   @override
-  Future<bool> restartNotificationService() {
-    // TODO: implement restartNotificationService
-    throw UnimplementedError();
+  Future<bool> stopNotificationService() async {
+    return true; // test stub
+  }
+
+  @override
+  Future<bool> restartNotificationService() async {
+    return true; // test stub
   }
 }

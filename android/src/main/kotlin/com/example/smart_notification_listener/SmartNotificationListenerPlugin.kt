@@ -1,19 +1,19 @@
 package com.example.smart_notification_listener
-import android.provider.Settings.Secure
+
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
-import io.flutter.embedding.engine.plugins.activity.ActivityAware
-import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
-/** SmartNotificationListenerPlugin */
-class SmartNotificationListenerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler, ActivityAware {
+class SmartNotificationListenerPlugin :
+    FlutterPlugin,
+    MethodChannel.MethodCallHandler,
+    EventChannel.StreamHandler {
+
     private lateinit var context: Context
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
@@ -31,12 +31,7 @@ class SmartNotificationListenerPlugin : FlutterPlugin, MethodChannel.MethodCallH
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "isNotificationServiceRunning" -> {
-                val enabledListeners = Secure.getString(
-                  context.contentResolver,
-                  "enabled_notification_listeners"
-                )
-                val packageName = context.packageName
-                result.success(enabledListeners?.contains(packageName) == true)
+                result.success(NotificationListener.serviceInstance != null)
             }
 
             "startNotificationService" -> {
@@ -58,33 +53,33 @@ class SmartNotificationListenerPlugin : FlutterPlugin, MethodChannel.MethodCallH
                 result.success(true)
             }
 
-
             "openNotificationSettings" -> {
-              try {
-                  val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-                  intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                  context.startActivity(intent)
-                  result.success(true)
-              } catch (e: Exception) {
-                  result.error("ERROR", "Failed to open notification settings: ${e.message}", null)
-              }
+                try {
+                    val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS").apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error("ERROR", "Failed to open notification settings: ${e.message}", null)
+                }
             }
 
             "sendReply" -> {
                 val id = call.argument<String>("id")
                 val message = call.argument<String>("message")
+                val actionKey = call.argument<String>("actionKey")
 
                 if (id != null && message != null) {
-                    val success = NotificationListener.sendReply(id, message)
+                    val success = NotificationListener.sendReply(id, message, context, actionKey)
                     result.success(success)
                 } else {
                     result.error("INVALID_ARGUMENTS", "id and message are required", null)
                 }
             }
 
-            else -> {
-                result.notImplemented()
-            }
+
+            else -> result.notImplemented()
         }
     }
 
@@ -100,10 +95,4 @@ class SmartNotificationListenerPlugin : FlutterPlugin, MethodChannel.MethodCallH
         methodChannel.setMethodCallHandler(null)
         eventChannel.setStreamHandler(null)
     }
-
-    // No-op implementations since we don't need Activity for this plugin
-    override fun onAttachedToActivity(binding: ActivityPluginBinding) {}
-    override fun onDetachedFromActivityForConfigChanges() {}
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
-    override fun onDetachedFromActivity() {}
 }
