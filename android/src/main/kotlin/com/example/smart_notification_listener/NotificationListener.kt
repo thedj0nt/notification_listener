@@ -2,8 +2,8 @@ package com.example.smart_notification_listener
 
 import android.app.Notification
 import android.app.RemoteInput
-import android.content.Intent
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -23,12 +23,22 @@ class NotificationListener : NotificationListenerService() {
         var eventSink: EventChannel.EventSink? = null
         var serviceInstance: NotificationListener? = null
 
+        // Instead of actually starting/stopping the Android NotificationListenerService
+        // (which the system controls), we "fake" the behavior here. This flag tells
+        // our plugin whether it should actively process notifications or ignore them.
+        // This emulates the start/stop API from flutter_notification_listener so the
+        // Flutter side behaves the same way, even though the service itself always runs.
+
+        // Controls whether we actually process notifications (fake start/stop)
+        var isEnabled: Boolean = true
+
         fun sendReply(
             id: String,
             message: String,
             context: Context,
             actionKey: String? = null
         ): Boolean {
+            if (!isEnabled) return false
             try {
                 val sbn = serviceInstance?.activeNotifications?.find { it.key == id }
                 if (sbn != null) {
@@ -96,15 +106,30 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.d("NotificationListener", "Service created")
         serviceInstance = this
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.d("NotificationListener", "Listener connected")
+        serviceInstance = this
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.d("NotificationListener", "Listener disconnected")
+        serviceInstance = null
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        Log.d("NotificationListener", "Service destroyed")
         serviceInstance = null
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (!isEnabled) return  // respect fake stop
         try {
             val extras = sbn.notification.extras
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
@@ -139,17 +164,5 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         // optional: notify Flutter about removals
-    }
-
-    override fun onListenerConnected() {
-        super.onListenerConnected()
-        Log.d("NotificationListener", "Listener connected")
-        serviceInstance = this
-    }
-
-    override fun onListenerDisconnected() {
-        super.onListenerDisconnected()
-        Log.d("NotificationListener", "Listener disconnected")
-        serviceInstance = null
     }
 }

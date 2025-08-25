@@ -2,8 +2,9 @@ package com.example.smart_notification_listener
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.annotation.NonNull
+import android.os.Handler
+import android.os.Looper
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -31,25 +32,38 @@ class SmartNotificationListenerPlugin :
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "isNotificationServiceRunning" -> {
-                result.success(NotificationListener.serviceInstance != null)
+                // Running only when the system has connected the service AND we are enabled
+                val isAlive = NotificationListener.serviceInstance != null
+                result.success(isAlive && NotificationListener.isEnabled)
             }
 
             "startNotificationService" -> {
-                val intent = Intent(context, NotificationListener::class.java)
-                context.startService(intent)
+                // Fake start: enable processing
+                NotificationListener.isEnabled = true
+                // (Optional) nudge the service if needed; harmless if ignored
+                try {
+                    val intent = Intent(context, NotificationListener::class.java)
+                    context.startService(intent)
+                } catch (_: Exception) { /* ignore */ }
                 result.success(true)
             }
 
             "stopNotificationService" -> {
-                val intent = Intent(context, NotificationListener::class.java)
-                context.stopService(intent)
+                // Fake stop: disable processing
+                NotificationListener.isEnabled = false
+                // Do not call stopService; it doesn't control NotificationListenerService
                 result.success(true)
             }
 
             "restartNotificationService" -> {
-                val intent = Intent(context, NotificationListener::class.java)
-                context.stopService(intent)
-                context.startService(intent)
+                NotificationListener.isEnabled = false
+                Handler(Looper.getMainLooper()).postDelayed({
+                    NotificationListener.isEnabled = true
+                    try {
+                        val intent = Intent(context, NotificationListener::class.java)
+                        context.startService(intent)
+                    } catch (_: Exception) { /* ignore */ }
+                }, 300)
                 result.success(true)
             }
 
@@ -77,7 +91,6 @@ class SmartNotificationListenerPlugin :
                     result.error("INVALID_ARGUMENTS", "id and message are required", null)
                 }
             }
-
 
             else -> result.notImplemented()
         }
