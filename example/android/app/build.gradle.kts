@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.smart_notification_listener_example"
+    namespace = "com.ronak.smart_notification_listener_example"
     compileSdk = 35
     ndkVersion = "27.0.12077973"
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.smart_notification_listener"
+        applicationId = "com.ronak.smart_notification_listener"
         minSdk = 21
         targetSdk = 34
         versionCode = 1

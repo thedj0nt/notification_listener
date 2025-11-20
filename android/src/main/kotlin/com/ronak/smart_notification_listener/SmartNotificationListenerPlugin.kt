@@ -1,7 +1,8 @@
-package com.example.smart_notification_listener
+package com.ronak.smart_notification_listener
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.annotation.NonNull
 import android.os.Handler
 import android.os.Looper

@@ -1,14 +1,18 @@
-package com.example.smart_notification_listener
+package com.ronak.smart_notification_listener
 
 import android.app.Notification
 import android.app.RemoteInput
-import android.content.Context
 import android.content.Intent
+import android.content.Context
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import io.flutter.plugin.common.EventChannel
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import java.util.Date
 
 data class NotificationAction(
     val actionId: String,
@@ -22,15 +26,7 @@ class NotificationListener : NotificationListenerService() {
     companion object {
         var eventSink: EventChannel.EventSink? = null
         var serviceInstance: NotificationListener? = null
-
-        // Instead of actually starting/stopping the Android NotificationListenerService
-        // (which the system controls), we "fake" the behavior here. This flag tells
-        // our plugin whether it should actively process notifications or ignore them.
-        // This emulates the start/stop API from flutter_notification_listener so the
-        // Flutter side behaves the same way, even though the service itself always runs.
-
-        // Controls whether we actually process notifications (fake start/stop)
-        var isEnabled: Boolean = true
+        var isEnabled: Boolean = false
 
         fun sendReply(
             id: String,
@@ -38,7 +34,6 @@ class NotificationListener : NotificationListenerService() {
             context: Context,
             actionKey: String? = null
         ): Boolean {
-            if (!isEnabled) return false
             try {
                 val sbn = serviceInstance?.activeNotifications?.find { it.key == id }
                 if (sbn != null) {
@@ -110,32 +105,27 @@ class NotificationListener : NotificationListenerService() {
         serviceInstance = this
     }
 
-    override fun onListenerConnected() {
-        super.onListenerConnected()
-        Log.d("NotificationListener", "Listener connected")
-        serviceInstance = this
-    }
-
-    override fun onListenerDisconnected() {
-        super.onListenerDisconnected()
-        Log.d("NotificationListener", "Listener disconnected")
-        serviceInstance = null
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        Log.d("NotificationListener", "Service destroyed")
         serviceInstance = null
     }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification) {
-        if (!isEnabled) return  // respect fake stop
+    override fun onNotificationPosted (sbn: StatusBarNotification) {
+        // NEW: Hard stop if disabled
+        if (!isEnabled) {
+            Log.d("NotificationListener", "Service disabled — ignoring notification.")
+            return
+        }
+
         try {
             val extras = sbn.notification.extras
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
             val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 
             val actions = extractActions(sbn.notification, sbn.packageName, sbn.key)
+            val utcFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
 
             val map = mapOf(
                 "packageName" to sbn.packageName,
@@ -143,7 +133,7 @@ class NotificationListener : NotificationListenerService() {
                 "title" to title,
                 "text" to text,
                 "canReply" to actions.any { it.isReplyAction },
-                "receivedAtFormatted" to System.currentTimeMillis().toString(),
+                "receivedAtFormatted" to utcFormatter.format(Date()),
                 "extras" to extras.keySet().associateWith { extras[it]?.toString() ?: "" },
                 "actions" to actions.map {
                     mapOf(
@@ -164,5 +154,17 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         // optional: notify Flutter about removals
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.d("NotificationListener", "Listener connected")
+        serviceInstance = this
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.d("NotificationListener", "Listener disconnected")
+        serviceInstance = null
     }
 }

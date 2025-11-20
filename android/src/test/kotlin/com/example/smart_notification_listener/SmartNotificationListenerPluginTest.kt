@@ -1,4 +1,4 @@
-package com.example.smart_notification_listener
+package com.ronak.smart_notification_listener
 
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
