@@ -28,7 +28,13 @@ class NotificationListener : NotificationListenerService() {
 
     companion object {
         var eventSink: EventChannel.EventSink? = null
-        var serviceInstance: NotificationListener? = null
+
+        @Volatile
+        private var serviceInstance: NotificationListener? = null
+
+        // provide safe accessor for other classes
+        fun getServiceInstance(): NotificationListener? = serviceInstance
+
         var isEnabled: Boolean = false
         var includeExtras: Boolean = false
 
@@ -107,7 +113,7 @@ class NotificationListener : NotificationListenerService() {
                     )
                 }
             } catch (e: Exception) {
-                Log.e("NotificationListener", "extractActions error: ${e.message}", e)
+                // Log.e("NotificationListener", "extractActions error: ${e.message}", e)
             }
             return actions
         }
@@ -193,7 +199,7 @@ class NotificationListener : NotificationListenerService() {
             // uncomment this only for debugging
             // Log.d("NotificationListener", "Notification posted: $map")
         } catch (e: Exception) {
-            Log.e("NotificationListener", "onNotificationPosted error: ${e.message}", e)
+            // Log.e("NotificationListener", "onNotificationPosted error: ${e.message}", e)
         }
     }
 

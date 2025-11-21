@@ -10,6 +10,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import androidx.core.app.NotificationManagerCompat
 
 class SmartNotificationListenerPlugin :
     FlutterPlugin,
@@ -34,7 +35,7 @@ class SmartNotificationListenerPlugin :
         when (call.method) {
             "isNotificationServiceRunning" -> {
                 // Running only when the system has connected the service AND we are enabled
-                val isAlive = NotificationListener.serviceInstance != null
+                val isAlive = NotificationListener.getServiceInstance() != null
                 result.success(isAlive && NotificationListener.isEnabled)
             }
 
@@ -94,10 +95,8 @@ class SmartNotificationListenerPlugin :
             }
 
             "hasPermission" -> {
-                val enabledListeners = android.provider.Settings.Secure
-                    .getString(context.contentResolver, "enabled_notification_listeners") ?: ""
-                val packageName = context.packageName
-                result.success(enabledListeners.contains(packageName))
+                val enabled = NotificationManagerCompat.getEnabledListenerPackages(context)
+                result.success(enabled.contains(context.packageName))
             }
 
             // uncomment this if we need to include the extras info in the notificaiton object
