@@ -28,45 +28,63 @@ class _NotificationHomePageState extends State<NotificationHomePage> {
   final SmartNotificationListener plugin = SmartNotificationListener();
   final List<SmartNotification> _notifications = [];
   bool _isServiceRunning = false;
+  bool _hasPermission = false;
 
   @override
   void initState() {
     super.initState();
-    _initService();
+    _init();
     _listenNotifications();
   }
 
-  Future<void> _initService() async {
+  // ---------------------------------------
+  // INIT: Check permission + service status
+  // ---------------------------------------
+  Future<void> _init() async {
+    final perm = await plugin.hasPermission();
     final running = await plugin.isNotificationServiceRunning();
     setState(() {
-      _isServiceRunning = running;
+      _hasPermission = perm;
+      _isServiceRunning = running && perm;
     });
   }
 
+  // ---------------------------------------
+  // Listen to notifications
+  // ---------------------------------------
   void _listenNotifications() {
-    plugin.notifications.listen((event) {
-      final notification = event;
-      // allow all notification expect the keyboard launch notification
-      if (notification.packageName != 'android') {
-        setState(() {
-          _notifications.insert(0, notification);
-        });
-      }
+    plugin.notifications.listen((notification) {
+      // Ignore keyboard service internal notifications
+      if (notification.packageName == 'android') return;
+      setState(() {
+        _notifications.insert(0, notification);
+      });
     });
   }
 
+  // ---------------------------------------
+  // Toggle start/stop
+  // ---------------------------------------
   Future<void> _toggleService() async {
+    // Enforce permission
+    final perm = await plugin.hasPermission();
+    if (!perm) {
+      await plugin.openNotificationSettings();
+      return;
+    }
     if (_isServiceRunning) {
       await plugin.stopNotificationService();
     } else {
       await plugin.startNotificationService();
     }
-    _initService();
+    await _init();
   }
 
+  // ---------------------------------------
+  // Send reply
+  // ---------------------------------------
   Future<void> _sendReply(SmartNotification notification, String message) async {
     try {
-      // pick the reply action from notification.actions
       final replyAction = notification.actions.firstWhere(
         (a) => a.isReplyAction,
         orElse: () => throw Exception("No reply action available"),
@@ -88,16 +106,19 @@ class _NotificationHomePageState extends State<NotificationHomePage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error: ${e.toString()}"),
+          content: Text("Error: $e"),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
+  // ---------------------------------------
+  // Notification Card UI
+  // ---------------------------------------
   Widget _buildNotificationCard(SmartNotification n) {
     final TextEditingController controller = TextEditingController();
-    var actioninfo = n.actions.isNotEmpty ? n.actions.first : null;
+    final actionInfo = n.actions.isNotEmpty ? n.actions.first : null;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -106,14 +127,18 @@ class _NotificationHomePageState extends State<NotificationHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(n.packageName,
-              style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              n.packageName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
-            Text(n.title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            Text(
+              n.title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
             const SizedBox(height: 2),
             Text(n.text),
-            n.canReply && n.actions.isNotEmpty && actioninfo != null && actioninfo.inputs.isNotEmpty ?
+            if (n.canReply && actionInfo != null && actionInfo.inputs.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Row(
@@ -139,14 +164,16 @@ class _NotificationHomePageState extends State<NotificationHomePage> {
                     ),
                   ],
                 ),
-              )
-            : SizedBox(),
+              ),
           ],
         ),
       ),
     );
   }
 
+  // ---------------------------------------
+  // BUILD UI
+  // ---------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -161,18 +188,26 @@ class _NotificationHomePageState extends State<NotificationHomePage> {
             icon: const Icon(Icons.settings),
             onPressed: () async {
               await plugin.openNotificationSettings();
+              await _init(); // re-check after returning
             },
           ),
         ],
       ),
-      body: _notifications.isEmpty
-        ? const Center(child: Text("No notifications yet"))
-        : ListView.builder(
-            itemCount: _notifications.length,
-            itemBuilder: (context, index) {
-              return _buildNotificationCard(_notifications[index]);
-            },
-          ),
-    );
+
+      body: !_hasPermission
+        ? const Center(
+            child: Text(
+              "Permission not granted.\nPlease enable Notification Access.",
+              textAlign: TextAlign.center,
+            ),
+          )
+        : _notifications.isEmpty
+          ? const Center(child: Text("No notifications yet"))
+          : ListView.builder(
+              itemCount: _notifications.length,
+              itemBuilder: (context, index) =>
+                  _buildNotificationCard(_notifications[index]),
+            ),
+  );
   }
 }

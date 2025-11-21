@@ -48,6 +48,10 @@ class SmartNotificationListener {
     return SmartNotificationListenerPlatform.instance.restartNotificationService();
   }
 
+  Future<bool> hasPermission() {
+    return SmartNotificationListenerPlatform.instance.hasPermission();
+  }
+
   /// Sends a reply using the given notification action.
   /// Automatically uses the correct ID and input key.
   /// Returns `true` if the reply was successfully sent.

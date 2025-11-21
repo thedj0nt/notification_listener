@@ -55,6 +55,12 @@ class MethodChannelSmartNotificationListener
   }
 
   @override
+  Future<bool> hasPermission() async {
+    final result = await methodChannel.invokeMethod<bool>('hasPermission');
+    return result ?? false;
+  }
+
+  @override
   Future<bool> sendReply({
     required String id,
     required String message,

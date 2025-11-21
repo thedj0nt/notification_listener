@@ -93,6 +93,20 @@ class SmartNotificationListenerPlugin :
                 }
             }
 
+            "hasPermission" -> {
+                val enabledListeners = android.provider.Settings.Secure
+                    .getString(context.contentResolver, "enabled_notification_listeners") ?: ""
+                val packageName = context.packageName
+                result.success(enabledListeners.contains(packageName))
+            }
+
+            // uncomment this if we need to include the extras info in the notificaiton object
+            // "setIncludeExtras" -> {
+            //   val enabled = call.argument<Boolean>("enabled") ?: false
+            //   NotificationListener.includeExtras = enabled
+            //   result.success(true)
+            // }
+
             else -> result.notImplemented()
         }
     }

@@ -13,6 +13,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 import java.util.Date
+import android.os.Handler
+import android.os.Looper
+
 
 data class NotificationAction(
     val actionId: String,
@@ -27,6 +30,7 @@ class NotificationListener : NotificationListenerService() {
         var eventSink: EventChannel.EventSink? = null
         var serviceInstance: NotificationListener? = null
         var isEnabled: Boolean = false
+        var includeExtras: Boolean = false
 
         fun sendReply(
             id: String,
@@ -35,6 +39,16 @@ class NotificationListener : NotificationListenerService() {
             actionKey: String? = null
         ): Boolean {
             try {
+                 // --- Validate input ---
+                if (id.isBlank()) return false
+                if (message.isBlank()) return false
+
+                // Security & stability: prevent extremely large replies that may crash messaging apps via RemoteInput
+                if (message.length > 2000) return false
+
+                // Safety check: actionKey should be short; long values may indicate misuse or malformed input
+                if (actionKey != null && actionKey.length > 200) return false
+
                 val sbn = serviceInstance?.activeNotifications?.find { it.key == id }
                 if (sbn != null) {
                     val actions = sbn.notification.actions ?: return false
@@ -68,7 +82,7 @@ class NotificationListener : NotificationListenerService() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("NotificationListener", "sendReply error: ${e.message}", e)
+                // Log.e("NotificationListener", "sendReply error: ${e.message}", e)
             }
             return false
         }
@@ -101,7 +115,7 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("NotificationListener", "Service created")
+        // Log.d("NotificationListener", "Service created")
         serviceInstance = this
     }
 
@@ -113,19 +127,40 @@ class NotificationListener : NotificationListenerService() {
     override fun onNotificationPosted (sbn: StatusBarNotification) {
         // NEW: Hard stop if disabled
         if (!isEnabled) {
-            Log.d("NotificationListener", "Service disabled — ignoring notification.")
+            // Log.d("NotificationListener", "Service disabled — ignoring notification.")
             return
         }
 
         try {
             val extras = sbn.notification.extras
-            val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+            
+            // Basic fields (sanitized/truncated)
+            val rawTitle = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+            val rawText  = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+
+            // Truncate to safe lengths to avoid flooding / crashes
+            val title = rawTitle.take(500)   // titles are usually short
+            val text  = rawText.take(2000)   // protect against extremely long notifications
 
             val actions = extractActions(sbn.notification, sbn.packageName, sbn.key)
             val utcFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
                 timeZone = TimeZone.getTimeZone("UTC")
             }
+
+            // Optionally include extras — disabled by default for privacy
+            // val safeExtras: Map<String, String> = if (includeExtras) {
+            //    try {
+            //        extras.keySet().associateWith { key ->
+            //            val v = extras[key]?.toString() ?: ""
+            //            // truncate individual extra values to a safe length
+            //            v.take(2000)
+            //       }
+            //    } catch (_: Exception) {
+            //        emptyMap()
+            //    }
+            // } else {
+            //   emptyMap()
+            // }
 
             val map = mapOf(
                 "packageName" to sbn.packageName,
@@ -134,7 +169,7 @@ class NotificationListener : NotificationListenerService() {
                 "text" to text,
                 "canReply" to actions.any { it.isReplyAction },
                 "receivedAtFormatted" to utcFormatter.format(Date()),
-                "extras" to extras.keySet().associateWith { extras[it]?.toString() ?: "" },
+                // "extras" to safeExtras, // uncomment this when extra info is needed
                 "actions" to actions.map {
                     mapOf(
                         "actionId" to it.actionId,
@@ -145,8 +180,18 @@ class NotificationListener : NotificationListenerService() {
                 }
             )
 
-            eventSink?.success(map)
-            Log.d("NotificationListener", "Notification posted: $map")
+            // Deliver event on main thread (safe for EventChannel)
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    eventSink?.success(map)
+                } catch (e: Exception) {
+                    // debug-only logging — do not log sensitive data in release
+                    // Log.e("NotificationListener", "eventSink.success failed: ${e.message}", e)
+                }
+            }
+
+            // uncomment this only for debugging
+            // Log.d("NotificationListener", "Notification posted: $map")
         } catch (e: Exception) {
             Log.e("NotificationListener", "onNotificationPosted error: ${e.message}", e)
         }
@@ -158,13 +203,13 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.d("NotificationListener", "Listener connected")
+        // Log.d("NotificationListener", "Listener connected")
         serviceInstance = this
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.d("NotificationListener", "Listener disconnected")
+        // Log.d("NotificationListener", "Listener disconnected")
         serviceInstance = null
     }
 }

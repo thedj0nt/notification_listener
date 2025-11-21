@@ -46,6 +46,11 @@ abstract class SmartNotificationListenerPlatform extends PlatformInterface {
     throw UnimplementedError('restartNotificationService() has not been implemented.');
   }
 
+  /// Check whether notification listener permission is granted.
+  Future<bool> hasPermission() {
+    throw UnimplementedError('hasPermission() has not been implemented.');
+  }
+
   /// Send a reply to a notification (simple)
   Future<bool> sendReply({
     required String id,
