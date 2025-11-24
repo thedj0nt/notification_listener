@@ -2,20 +2,16 @@ package com.ronak.smart_notification_listener
 
 import android.app.Notification
 import android.app.RemoteInput
-import android.content.Intent
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
-import io.flutter.plugin.common.EventChannel
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
-import java.util.Date
 import android.os.Handler
 import android.os.Looper
-
+import io.flutter.plugin.common.EventChannel
+import java.text.SimpleDateFormat
+import java.util.*
 
 data class NotificationAction(
     val actionId: String,
@@ -27,12 +23,12 @@ data class NotificationAction(
 class NotificationListener : NotificationListenerService() {
 
     companion object {
+        @Volatile
         var eventSink: EventChannel.EventSink? = null
 
         @Volatile
         private var serviceInstance: NotificationListener? = null
 
-        // provide safe accessor for other classes
         fun getServiceInstance(): NotificationListener? = serviceInstance
 
         var isEnabled: Boolean = false
@@ -45,83 +41,66 @@ class NotificationListener : NotificationListenerService() {
             actionKey: String? = null
         ): Boolean {
             try {
-                 // --- Validate input ---
-                if (id.isBlank()) return false
-                if (message.isBlank()) return false
-
-                // Security & stability: prevent extremely large replies that may crash messaging apps via RemoteInput
-                if (message.length > 2000) return false
-
-                // Safety check: actionKey should be short; long values may indicate misuse or malformed input
+                if (id.isBlank() || message.isBlank() || message.length > 2000) return false
                 if (actionKey != null && actionKey.length > 200) return false
 
-                val sbn = serviceInstance?.activeNotifications?.find { it.key == id }
-                if (sbn != null) {
-                    val actions = sbn.notification.actions ?: return false
+                val instance = serviceInstance ?: return false
+                val sbn = instance.activeNotifications?.find { it.key == id } ?: return false
+                val actions = sbn.notification.actions ?: return false
 
-                    // Pick target action
-                    val targetAction = if (actionKey != null) {
-                        // match by title or remoteInput resultKey
-                        actions.firstOrNull { action ->
-                            action.title?.toString() == actionKey ||
-                            action.remoteInputs?.any { ri -> ri.resultKey == actionKey } == true
-                        }
-                    } else {
-                        // fallback: first action with free-form input
-                        actions.firstOrNull { action ->
-                            action.remoteInputs?.any { ri -> ri.allowFreeFormInput } == true
-                        }
+                val targetAction = if (actionKey != null) {
+                    actions.firstOrNull { action ->
+                        action?.title?.toString() == actionKey ||
+                        action?.remoteInputs?.any { ri -> ri?.resultKey == actionKey } == true
                     }
-
-                    if (targetAction != null) {
-                        val remoteInput = targetAction.remoteInputs?.firstOrNull() ?: return false
-
-                        val bundle = Bundle().apply {
-                            putCharSequence(remoteInput.resultKey, message)
-                        }
-
-                        val fillInIntent = Intent()
-                        RemoteInput.addResultsToIntent(arrayOf(remoteInput), fillInIntent, bundle)
-
-                        targetAction.actionIntent.send(context, 0, fillInIntent)
-                        return true
+                } else {
+                    actions.firstOrNull { action ->
+                        action?.remoteInputs?.any { ri -> ri?.allowFreeFormInput == true } == true
                     }
+                } ?: return false
+
+                val remoteInput = targetAction.remoteInputs?.firstOrNull() ?: return false
+
+                val bundle = Bundle().apply {
+                    putCharSequence(remoteInput.resultKey, message)
                 }
-            } catch (e: Exception) {
-                // Log.e("NotificationListener", "sendReply error: ${e.message}", e)
+
+                val fillInIntent = Intent()
+                RemoteInput.addResultsToIntent(arrayOf(remoteInput), fillInIntent, bundle)
+
+                targetAction.actionIntent?.send(context, 0, fillInIntent)
+                return true
+            } catch (_: Exception) {
+                return false
             }
-            return false
         }
 
-        fun extractActions(notification: Notification?, packageName: String, key: String): List<NotificationAction> {
-            val actions = mutableListOf<NotificationAction>()
+        fun extractActions(notification: Notification?, key: String): List<NotificationAction> {
+            val actionsList = mutableListOf<NotificationAction>()
             try {
                 notification?.actions?.forEachIndexed { index, action ->
                     val inputs = mutableListOf<String>()
                     var isReply = false
-                    action.remoteInputs?.forEach { ri ->
-                        inputs.add(ri.resultKey)
-                        if (ri.allowFreeFormInput) isReply = true
+                    action?.remoteInputs?.forEach { ri ->
+                        ri?.resultKey?.let { inputs.add(it) }
+                        if (ri?.allowFreeFormInput == true) isReply = true
                     }
-                    actions.add(
+                    actionsList.add(
                         NotificationAction(
                             actionId = "${key}_$index",
-                            title = action.title?.toString() ?: "",
+                            title = action?.title?.toString() ?: "",
                             inputs = inputs,
                             isReplyAction = isReply
                         )
                     )
                 }
-            } catch (e: Exception) {
-                // Log.e("NotificationListener", "extractActions error: ${e.message}", e)
-            }
-            return actions
+            } catch (_: Exception) { }
+            return actionsList
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        // Log.d("NotificationListener", "Service created")
         serviceInstance = this
     }
 
@@ -130,52 +109,27 @@ class NotificationListener : NotificationListenerService() {
         serviceInstance = null
     }
 
-    override fun onNotificationPosted (sbn: StatusBarNotification) {
-        // NEW: Hard stop if disabled
-        if (!isEnabled) {
-            // Log.d("NotificationListener", "Service disabled — ignoring notification.")
-            return
-        }
-
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
         try {
-            val extras = sbn.notification.extras
-            
-            // Basic fields (sanitized/truncated)
-            val rawTitle = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-            val rawText  = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+            if (!isEnabled || sbn == null) return
 
-            // Truncate to safe lengths to avoid flooding / crashes
-            val title = rawTitle.take(500)   // titles are usually short
-            val text  = rawText.take(2000)   // protect against extremely long notifications
+            val notification = sbn.notification ?: return
+            val extras = notification.extras
+            val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.take(500) ?: ""
+            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.take(2000) ?: ""
 
-            val actions = extractActions(sbn.notification, sbn.packageName, sbn.key)
+            val actions = extractActions(notification, sbn.key)
             val utcFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
                 timeZone = TimeZone.getTimeZone("UTC")
             }
 
-            // Optionally include extras — disabled by default for privacy
-            // val safeExtras: Map<String, String> = if (includeExtras) {
-            //    try {
-            //        extras.keySet().associateWith { key ->
-            //            val v = extras[key]?.toString() ?: ""
-            //            // truncate individual extra values to a safe length
-            //            v.take(2000)
-            //       }
-            //    } catch (_: Exception) {
-            //        emptyMap()
-            //    }
-            // } else {
-            //   emptyMap()
-            // }
-
-            val map = mapOf(
+            val map = mutableMapOf<String, Any>(
                 "packageName" to sbn.packageName,
                 "id" to sbn.key,
                 "title" to title,
                 "text" to text,
                 "canReply" to actions.any { it.isReplyAction },
                 "receivedAtFormatted" to utcFormatter.format(Date()),
-                // "extras" to safeExtras, // uncomment this when extra info is needed
                 "actions" to actions.map {
                     mapOf(
                         "actionId" to it.actionId,
@@ -186,36 +140,24 @@ class NotificationListener : NotificationListenerService() {
                 }
             )
 
-            // Deliver event on main thread (safe for EventChannel)
             Handler(Looper.getMainLooper()).post {
                 try {
                     eventSink?.success(map)
-                } catch (e: Exception) {
-                    // debug-only logging — do not log sensitive data in release
-                    // Log.e("NotificationListener", "eventSink.success failed: ${e.message}", e)
-                }
+                } catch (_: Exception) { }
             }
 
-            // uncomment this only for debugging
-            // Log.d("NotificationListener", "Notification posted: $map")
-        } catch (e: Exception) {
-            // Log.e("NotificationListener", "onNotificationPosted error: ${e.message}", e)
-        }
-    }
-
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        // optional: notify Flutter about removals
+        } catch (_: Exception) { }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        // Log.d("NotificationListener", "Listener connected")
         serviceInstance = this
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        // Log.d("NotificationListener", "Listener disconnected")
         serviceInstance = null
     }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) { }
 }

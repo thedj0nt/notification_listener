@@ -2,15 +2,17 @@ package com.ronak.smart_notification_listener
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
-import androidx.annotation.NonNull
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.NonNull
+import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import androidx.core.app.NotificationManagerCompat
+import android.provider.Settings
+import android.content.ComponentName
+import android.util.Log
 
 class SmartNotificationListenerPlugin :
     FlutterPlugin,
@@ -34,26 +36,20 @@ class SmartNotificationListenerPlugin :
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "isNotificationServiceRunning" -> {
-                // Running only when the system has connected the service AND we are enabled
-                val isAlive = NotificationListener.getServiceInstance() != null
-                result.success(isAlive && NotificationListener.isEnabled)
+                val instance = NotificationListener.getServiceInstance()
+                result.success(instance != null && NotificationListener.isEnabled)
             }
 
             "startNotificationService" -> {
-                // Fake start: enable processing
                 NotificationListener.isEnabled = true
-                // (Optional) nudge the service if needed; harmless if ignored
-                try {
-                    val intent = Intent(context, NotificationListener::class.java)
-                    context.startService(intent)
-                } catch (_: Exception) { /* ignore */ }
+                try { 
+                    context.startService(Intent(context, NotificationListener::class.java)) 
+                } catch (_: Exception) {}
                 result.success(true)
             }
 
             "stopNotificationService" -> {
-                // Fake stop: disable processing
                 NotificationListener.isEnabled = false
-                // Do not call stopService; it doesn't control NotificationListenerService
                 result.success(true)
             }
 
@@ -61,50 +57,44 @@ class SmartNotificationListenerPlugin :
                 NotificationListener.isEnabled = false
                 Handler(Looper.getMainLooper()).postDelayed({
                     NotificationListener.isEnabled = true
-                    try {
-                        val intent = Intent(context, NotificationListener::class.java)
-                        context.startService(intent)
-                    } catch (_: Exception) { /* ignore */ }
+                    try { context.startService(Intent(context, NotificationListener::class.java)) } catch (_: Exception) {}
                 }, 300)
                 result.success(true)
             }
 
             "openNotificationSettings" -> {
                 try {
-                    val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS").apply {
+                    context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS").apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    context.startActivity(intent)
+                    })
                     result.success(true)
-                } catch (e: Exception) {
-                    result.error("ERROR", "Failed to open notification settings: ${e.message}", null)
-                }
+                } catch (e: Exception) { result.error("ERROR", e.message, null) }
             }
 
             "sendReply" -> {
                 val id = call.argument<String>("id")
                 val message = call.argument<String>("message")
                 val actionKey = call.argument<String>("actionKey")
-
                 if (id != null && message != null) {
-                    val success = NotificationListener.sendReply(id, message, context, actionKey)
-                    result.success(success)
+                    result.success(NotificationListener.sendReply(id, message, context, actionKey))
                 } else {
-                    result.error("INVALID_ARGUMENTS", "id and message are required", null)
+                    result.error("INVALID_ARGUMENTS", "id and message required", null)
                 }
             }
-
             "hasPermission" -> {
-                val enabled = NotificationManagerCompat.getEnabledListenerPackages(context)
-                result.success(enabled.contains(context.packageName))
-            }
+                val enabledListeners = Settings.Secure.getString(
+                    context.contentResolver,
+                    "enabled_notification_listeners" // <-- FIXED
+                ) ?: ""
 
-            // uncomment this if we need to include the extras info in the notificaiton object
-            // "setIncludeExtras" -> {
-            //   val enabled = call.argument<Boolean>("enabled") ?: false
-            //   NotificationListener.includeExtras = enabled
-            //   result.success(true)
-            // }
+                val componentName = ComponentName(context, NotificationListener::class.java)
+                val flattened = componentName.flattenToString()
+
+                Log.d("NL_DEBUG", "enabledListeners = $enabledListeners")
+                Log.d("NL_DEBUG", "expected = $flattened")
+
+                result.success(enabledListeners.contains(flattened))
+            }
 
             else -> result.notImplemented()
         }
