@@ -1,66 +1,63 @@
+import 'dart:async'; // Import this for StreamController
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'smart_notification_listener_platform_interface.dart';
 
-/// A Flutter wrapper for listening and replying to Android notifications.
-/// 
-/// This class provides a singleton instance to manage the connection to the
-/// Android Notification Service.
 class SmartNotificationListener {
   static final SmartNotificationListener _instance = SmartNotificationListener._internal();
 
   factory SmartNotificationListener() => _instance;
 
-  SmartNotificationListener._internal();
+  // Internal StreamController to manage the stream manually
+  final StreamController<SmartNotification> _controller = StreamController<SmartNotification>.broadcast();
+  StreamSubscription? _nativeSubscription;
 
-  /// A broadcast stream of notifications received from the Android service.
-  static const EventChannel _eventChannel = EventChannel('smart_notification_listener_event');
-
-  /// Internal cache for the stream to prevent constant reconnection.
-  Stream<SmartNotification>? _notificationStream;
-
-  /// A broadcast stream of incoming notifications.
-  /// 
-  /// This stream transforms the raw map data from Android into 
-  /// typed [SmartNotification] objects.
-  /// 
-  /// It also handles special status messages (like 'connected') by returning
-  /// an empty notification with the packageName set to the status.
-  Stream<SmartNotification> get notifications {
-    // FIX: Only create the stream once. 
-    // This prevents the "Sink detached/attached" loop when the UI rebuilds.
-    _notificationStream ??= _eventChannel
-        .receiveBroadcastStream()
-        .map((event) {
-          try {
-            // 1. Check if event is a MAP (Actual Notification)
-            if (event is Map) {
-              final map = Map<String, dynamic>.from(event);
-              return SmartNotification.fromMap(map);
-            } 
-            
-            // 2. Check if event is a STRING (Status message like "connected")
-            if (event is String) {
-              debugPrint("🔔 Native Status Event: $event");
-              // Return a special empty notification to signal status change
-              return SmartNotification.empty()..packageName = event;
-            }
-
-            return SmartNotification.empty();
-          } catch (e, stackTrace) {
-            debugPrint('Failed to parse SmartNotification: $e\n$stackTrace');
-            return SmartNotification.empty();
-          }
-        })
-        // Ensure multiple listeners can subscribe (e.g., UI and Logic)
-        .asBroadcastStream();
-
-    return _notificationStream!;
+  SmartNotificationListener._internal() {
+    // Start listening to the native side IMMEDIATELY and PERMANENTLY.
+    // This ensures the Sink never detaches even if the UI rebuilds.
+    _connectToNative();
   }
 
-  /// Opens the Android system settings screen where the user can grant 
-  /// "Notification Access" permission to this app.
+  static const EventChannel _eventChannel = EventChannel('smart_notification_listener_event');
+
+  void _connectToNative() {
+    if (_nativeSubscription != null) return;
+
+    // We subscribe to the native channel once. 
+    // We do NOT store this in a variable accessible to the UI.
+    _nativeSubscription = _eventChannel.receiveBroadcastStream().listen(
+      (event) {
+        try {
+          SmartNotification notification = SmartNotification.empty();
+          
+          if (event is Map) {
+            final map = Map<String, dynamic>.from(event);
+            notification = SmartNotification.fromMap(map);
+          } else if (event is String) {
+            debugPrint("🔔 Native Status Event: $event");
+            notification = SmartNotification.empty()..packageName = event;
+          }
+
+          // Forward the data to the controller
+          _controller.add(notification);
+        } catch (e, stackTrace) {
+          debugPrint('Failed to parse SmartNotification: $e\n$stackTrace');
+        }
+      },
+      onError: (error) {
+        debugPrint("Native Stream Error: $error");
+      },
+    );
+  }
+
+  /// A broadcast stream of notifications.
+  /// Subscribing/Unsubscribing to this will NOT disconnect the native layer.
+  Stream<SmartNotification> get notifications {
+    return _controller.stream;
+  }
+
+  /// Opens the Android system settings screen.
   Future<void> openNotificationSettings() {
     return SmartNotificationListenerPlatform.instance.openNotificationSettings();
   }
@@ -82,13 +79,13 @@ class SmartNotificationListener {
 
   /// Disconnects the method channel connection.
   Future<void> disconnect() async {
+    // Only here do we actually kill the native connection
+    await _nativeSubscription?.cancel();
+    _nativeSubscription = null;
     return SmartNotificationListenerPlatform.instance.disconnect();
   }
 
   /// Forces the Android service to restart.
-  /// 
-  /// Useful if the OS has silently killed the service. This method toggles
-  /// the component state to trigger a system-level restart.
   Future<bool> forceReconnect() {
     return SmartNotificationListenerPlatform.instance.forceReconnect();
   }
@@ -99,19 +96,12 @@ class SmartNotificationListener {
   }
 
   /// Sends a direct reply to a notification.
-  /// 
-  /// This mimics the user typing into the notification bar inline reply.
-  /// 
-  /// [notification]: The notification object received from the stream.
-  /// [message]: The text you want to send.
-  /// 
-  /// Returns `true` if the reply intent was successfully fired.
   Future<bool> sendReply({
     required SmartNotification notification,
     required String message,
   }) {
     return SmartNotificationListenerPlatform.instance.sendReply(
-      id: notification.id, // maps to sbn.key
+      id: notification.id,
       message: message,
     );
   }
@@ -119,25 +109,12 @@ class SmartNotificationListener {
 
 /// Represents a single notification received from Android.
 class SmartNotification {
-  /// The unique key assigned by Android. Required for replying.
   String id;
-
-  /// The package name of the app that posted the notification (e.g., 'com.whatsapp').
   String packageName;
-
-  /// The title of the notification (usually the sender's name).
   String title;
-
-  /// The main text body of the notification
   String text;
-
-  /// Formatted string of the time received.
   String receivedAt;
-
-  /// Raw extra data from the notification bundle.
   Map<String, String> extras;
-
-  /// List of actionable buttons available on this notification.
   List<NotificationAction> actions;
 
   SmartNotification({
@@ -182,16 +159,12 @@ class SmartNotification {
     receivedAt: '',
   );
 
-  /// Returns `true` if this notification contains an action that accepts text input.
   bool get canReply => actions.any((a) => a.isReplyAction);
 }
 
-/// Represents an action button attached to a notification.
 class NotificationAction {
   final String title;
   final String actionId;
-
-  /// List of input keys. If not empty, this action accepts text input.
   final List<String> inputs;
 
   NotificationAction({
@@ -208,7 +181,6 @@ class NotificationAction {
     );
   }
 
-  /// Helper to check if this action is a "Reply" button.
   bool get isReplyAction => inputs.isNotEmpty;
 }
 
