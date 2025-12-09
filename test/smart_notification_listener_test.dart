@@ -38,8 +38,23 @@ class MockSmartNotificationListenerPlatform
     return true; // test stub
   }
 
+  // @override
+  // Future<bool> restartNotificationService() async {
+  //   return true; // test stub
+  // }
+  
   @override
-  Future<bool> restartNotificationService() async {
-    return true; // test stub
+  Future<bool> forceReconnect() {
+    throw UnimplementedError();
+  }
+  
+  @override
+  Future<bool> hasPermission() {
+    throw UnimplementedError();
+  }
+  
+  @override
+  Future<void> disconnect() {
+    throw UnimplementedError();
   }
 }

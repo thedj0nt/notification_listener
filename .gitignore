@@ -1,7 +1,25 @@
-.DS_Store
+# IDE files
+.idea/
+*.iml
+
+# Flutter & Dart
 .dart_tool/
-
 .packages
-.pub/
-
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
 build/
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/build/
+
+# iOS (if added later)
+ios/Pods/
+ios/.symlinks/
+ios/DerivedData/
+
+# Mac & Windows junk
+.DS_Store
+Thumbs.db

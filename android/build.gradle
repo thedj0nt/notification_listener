@@ -25,7 +25,7 @@ apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 
 android {
-    namespace = "com.examronakple.smart_notification_listener"
+    namespace = "com.ronak.smart_notification_listener"
 
     compileSdk = 35
 

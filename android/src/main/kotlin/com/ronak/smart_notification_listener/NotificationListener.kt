@@ -1,163 +1,133 @@
 package com.ronak.smart_notification_listener
 
 import android.app.Notification
-import android.app.RemoteInput
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.app.RemoteInput
+import android.content.Context
+import android.content.ComponentName
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.os.Handler
-import android.os.Looper
-import io.flutter.plugin.common.EventChannel
-import java.text.SimpleDateFormat
-import java.util.*
-
-data class NotificationAction(
-    val actionId: String,
-    val title: String,
-    val inputs: List<String>,
-    val isReplyAction: Boolean
-)
+import android.util.Log
 
 class NotificationListener : NotificationListenerService() {
 
     companion object {
-        @Volatile
-        var eventSink: EventChannel.EventSink? = null
+        var isRunning: Boolean = false
+        private var instance: NotificationListener? = null
 
-        @Volatile
-        private var serviceInstance: NotificationListener? = null
+        // Static helper to reply to notifications
+        // This simulates a user typing into the "Quick Reply" text field of a notification.
+        fun sendReply(id: String, message: String): Boolean {
 
-        fun getServiceInstance(): NotificationListener? = serviceInstance
+            val service = instance ?: return false
 
-        var isEnabled: Boolean = false
-        var includeExtras: Boolean = false
+            // 1. Find the active notification by its unique Key
+            val sbn = service.activeNotifications?.find { it.key == id } ?: return false
+            
+            // 2. Search for the specific Action that allows Free Form Input (Text Reply)
+            val actions = sbn.notification.actions ?: return false
+            val replyAction = actions.find { action ->
+                action.remoteInputs?.any { it.allowFreeFormInput } == true
+            } ?: return false
 
-        fun sendReply(
-            id: String,
-            message: String,
-            context: Context,
-            actionKey: String? = null
-        ): Boolean {
-            try {
-                if (id.isBlank() || message.isBlank() || message.length > 2000) return false
-                if (actionKey != null && actionKey.length > 200) return false
+            val remoteInput = replyAction.remoteInputs?.firstOrNull() ?: return false
+            
+            // 3. Create a Bundle containing the user's message
+            val bundle = Bundle().apply {
+                putCharSequence(remoteInput.resultKey, message)
+            }
 
-                val instance = serviceInstance ?: return false
-                val sbn = instance.activeNotifications?.find { it.key == id } ?: return false
-                val actions = sbn.notification.actions ?: return false
+            // 4. Create an Intent and inject the RemoteInput results
+            val intent = Intent()
+            RemoteInput.addResultsToIntent(arrayOf(remoteInput), intent, bundle)
 
-                val targetAction = if (actionKey != null) {
-                    actions.firstOrNull { action ->
-                        action?.title?.toString() == actionKey ||
-                        action?.remoteInputs?.any { ri -> ri?.resultKey == actionKey } == true
-                    }
-                } else {
-                    actions.firstOrNull { action ->
-                        action?.remoteInputs?.any { ri -> ri?.allowFreeFormInput == true } == true
-                    }
-                } ?: return false
-
-                val remoteInput = targetAction.remoteInputs?.firstOrNull() ?: return false
-
-                val bundle = Bundle().apply {
-                    putCharSequence(remoteInput.resultKey, message)
-                }
-
-                val fillInIntent = Intent()
-                RemoteInput.addResultsToIntent(arrayOf(remoteInput), fillInIntent, bundle)
-
-                targetAction.actionIntent?.send(context, 0, fillInIntent)
-                return true
-            } catch (_: Exception) {
-                return false
+            // 5. Fire the PendingIntent. This sends the data back to the original app (e.g., WhatsApp).
+            return try {
+                replyAction.actionIntent.send(service, 0, intent)
+                true
+            } catch (e: Exception) {
+                Log.e("NLS", "Reply failed: ${e.message}")
+                false
             }
         }
-
-        fun extractActions(notification: Notification?, key: String): List<NotificationAction> {
-            val actionsList = mutableListOf<NotificationAction>()
-            try {
-                notification?.actions?.forEachIndexed { index, action ->
-                    val inputs = mutableListOf<String>()
-                    var isReply = false
-                    action?.remoteInputs?.forEach { ri ->
-                        ri?.resultKey?.let { inputs.add(it) }
-                        if (ri?.allowFreeFormInput == true) isReply = true
-                    }
-                    actionsList.add(
-                        NotificationAction(
-                            actionId = "${key}_$index",
-                            title = action?.title?.toString() ?: "",
-                            inputs = inputs,
-                            isReplyAction = isReply
-                        )
-                    )
-                }
-            } catch (_: Exception) { }
-            return actionsList
+        
+        // A hack to force the Android OS to restart the service if it gets killed or stuck.
+        // It briefly disables and re-enables the component setting.
+        fun forceReconnect(context: Context) {
+            val pm = context.packageManager
+            val componentName = ComponentName(context, NotificationListener::class.java)
+            // Toggle the component state to force system to restart service
+            pm.setComponentEnabledSetting(componentName, 
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, 
+                android.content.pm.PackageManager.DONT_KILL_APP)
+            pm.setComponentEnabledSetting(componentName, 
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 
+                android.content.pm.PackageManager.DONT_KILL_APP)
         }
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        serviceInstance = this
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        serviceInstance = null
-    }
-
-    override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        try {
-            if (!isEnabled || sbn == null) return
-
-            val notification = sbn.notification ?: return
-            val extras = notification.extras
-            val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.take(500) ?: ""
-            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.take(2000) ?: ""
-
-            val actions = extractActions(notification, sbn.key)
-            val utcFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
-
-            val map = mutableMapOf<String, Any>(
-                "packageName" to sbn.packageName,
-                "id" to sbn.key,
-                "title" to title,
-                "text" to text,
-                "canReply" to actions.any { it.isReplyAction },
-                "receivedAtFormatted" to utcFormatter.format(Date()),
-                "actions" to actions.map {
-                    mapOf(
-                        "actionId" to it.actionId,
-                        "title" to it.title,
-                        "inputs" to it.inputs,
-                        "isReplyAction" to it.isReplyAction
-                    )
-                }
-            )
-
-            Handler(Looper.getMainLooper()).post {
-                try {
-                    eventSink?.success(map)
-                } catch (_: Exception) { }
-            }
-
-        } catch (_: Exception) { }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        serviceInstance = this
+        instance = this
+        isRunning = true
+        Log.d("NLS", "Service Connected")
+        NotificationHelper.sendEvent("connected")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        serviceInstance = null
+        instance = null
+        isRunning = false
+        Log.d("NLS", "Service Disconnected")
+        NotificationHelper.sendEvent("disconnected")
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) { }
+    // Triggered by the OS whenever a new notification arrives
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        Log.d("NLS", "🔔 OS POSTED NOTIFICATION: ${sbn?.packageName}")
+        if (sbn == null) return
+        
+        
+        // Skip ongoing/process events if needed, but for now capture all
+        val notification = sbn.notification ?: return
+        val extras = notification.extras
+        
+        // Extract Data safely
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val packageName = sbn.packageName
+
+        // Parse Actions to check for "Reply" capabilities
+        val actionsList = ArrayList<Map<String, Any>>()
+        notification.actions?.forEach { action ->
+            val inputs = ArrayList<String>()
+            action.remoteInputs?.forEach { inputs.add(it.resultKey) }
+            actionsList.add(mapOf(
+                "title" to (action.title?.toString() ?: ""),
+                "inputs" to inputs,
+                "isReplyAction" to (inputs.isNotEmpty())
+            ))
+        }
+
+        // Format Date manually to ensure consistency across locales
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+        val dateString = dateFormat.format(java.util.Date(sbn.postTime))
+
+        val data = mapOf(
+            "id" to sbn.key,
+            "packageName" to sbn.packageName,
+            "title" to title,
+            "text" to text,
+            "receivedAtFormatted" to dateString, // <--- CHANGED THIS
+            "actions" to actionsList,
+            "canReply" to actionsList.any { it["isReplyAction"] as Boolean }
+        )
+
+        NotificationHelper.sendEvent(data)
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        // Optional: Send removal event if needed in the future
+    }
 }

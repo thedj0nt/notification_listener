@@ -1,8 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'smart_notification_listener_platform_interface.dart';
 
 /// A Flutter wrapper for listening and replying to Android notifications.
+/// 
+/// This class provides a singleton instance to manage the connection to the
+/// Android Notification Service.
 class SmartNotificationListener {
   static final SmartNotificationListener _instance = SmartNotificationListener._internal();
 
@@ -11,11 +15,32 @@ class SmartNotificationListener {
   SmartNotificationListener._internal();
 
   /// A broadcast stream of notifications received from the Android service.
+  static const EventChannel _eventChannel = EventChannel('smart_notification_listener_event');
+
+  /// A broadcast stream of incoming notifications.
+  /// 
+  /// This stream transforms the raw map data from Android into 
+  /// typed [SmartNotification] objects.
+  /// 
+  /// It also handles special status messages (like 'connected') by returning
+  /// an empty notification with the packageName set to the status.
   Stream<SmartNotification> get notifications {
-    return SmartNotificationListenerPlatform.instance.notifications.map((event) {
+    return _eventChannel.receiveBroadcastStream().map((event) {
       try {
-          final map = event.map((key, value) => MapEntry(key.toString(), value));
+        // 1. Check if event is a MAP (Actual Notification)
+        if (event is Map) {
+          final map = Map<String, dynamic>.from(event);
           return SmartNotification.fromMap(map);
+        } 
+        
+        // 2. Check if event is a STRING (Status message like "connected")
+        if (event is String) {
+          debugPrint("🔔 Native Status Event: $event");
+          // Return a special empty notification to signal status change
+          return SmartNotification.empty()..packageName = event;
+        }
+
+        return SmartNotification.empty();
       } catch (e, stackTrace) {
         debugPrint('Failed to parse SmartNotification: $e\n$stackTrace');
         return SmartNotification.empty();
@@ -23,60 +48,85 @@ class SmartNotificationListener {
     });
   }
 
-  /// Opens the Android settings screen to grant notification access.
+  /// Opens the Android system settings screen where the user can grant 
+  /// "Notification Access" permission to this app.
   Future<void> openNotificationSettings() {
     return SmartNotificationListenerPlatform.instance.openNotificationSettings();
   }
 
-  /// Returns `true` if the notification listener service is currently running.
+  /// Returns `true` if the Android Notification Listener Service is currently active.
   Future<bool> isNotificationServiceRunning() {
     return SmartNotificationListenerPlatform.instance.isNotificationServiceRunning();
   }
 
-  /// Starts the notification listener service.
+  // Commands the Android service to start.
   Future<bool> startNotificationService() {
     return SmartNotificationListenerPlatform.instance.startNotificationService();
   }
 
-  /// Stops the notification listener service.
+  /// Commands the Android service to stop.
   Future<bool> stopNotificationService() {
     return SmartNotificationListenerPlatform.instance.stopNotificationService();
   }
 
-  /// Restarts the notification listener service.
-  Future<bool> restartNotificationService() {
-    return SmartNotificationListenerPlatform.instance.restartNotificationService();
+  /// Disconnects the method channel connection.
+  Future<void> disconnect() async {
+    return SmartNotificationListenerPlatform.instance.disconnect();
   }
 
+  /// Forces the Android service to restart.
+  /// 
+  /// Useful if the OS has silently killed the service. This method toggles
+  /// the component state to trigger a system-level restart.
+  Future<bool> forceReconnect() {
+    return SmartNotificationListenerPlatform.instance.forceReconnect();
+  }
+
+  /// Checks if the user has granted "Notification Access" permission.
   Future<bool> hasPermission() {
     return SmartNotificationListenerPlatform.instance.hasPermission();
   }
 
-  /// Sends a reply using the given notification action.
-  /// Automatically uses the correct ID and input key.
-  /// Returns `true` if the reply was successfully sent.
+  /// Sends a direct reply to a notification.
+  /// 
+  /// This mimics the user typing into the notification bar inline reply.
+  /// 
+  /// [notification]: The notification object received from the stream.
+  /// [message]: The text you want to send.
+  /// 
+  /// Returns `true` if the reply intent was successfully fired.
   Future<bool> sendReply({
     required SmartNotification notification,
     required String message,
-    NotificationAction? action,
   }) {
     return SmartNotificationListenerPlatform.instance.sendReply(
       id: notification.id, // maps to sbn.key
       message: message,
-      actionKey: action?.inputs.isNotEmpty == true
-        ? action!.inputs.first // remoteInput key
-        : action?.title,     // fallback to title
     );
   }
 }
 
+/// Represents a single notification received from Android.
 class SmartNotification {
+  /// The unique key assigned by Android. Required for replying.
   String id;
+
+  /// The package name of the app that posted the notification (e.g., 'com.whatsapp').
   String packageName;
+
+  /// The title of the notification (usually the sender's name).
   String title;
+
+  /// The main text body of the notification
   String text;
+
+  /// Formatted string of the time received.
   String receivedAt;
+
+  /// Raw extra data from the notification bundle.
   Map<String, String> extras;
+
+  /// List of actionable buttons available on this notification.
   List<NotificationAction> actions;
 
   SmartNotification({
@@ -121,14 +171,16 @@ class SmartNotification {
     receivedAt: '',
   );
 
-  /// Add this getter
+  /// Returns `true` if this notification contains an action that accepts text input.
   bool get canReply => actions.any((a) => a.isReplyAction);
 }
 
-/// Represents an actionable button or input field in a notification.
+/// Represents an action button attached to a notification.
 class NotificationAction {
   final String title;
   final String actionId;
+
+  /// List of input keys. If not empty, this action accepts text input.
   final List<String> inputs;
 
   NotificationAction({
@@ -145,7 +197,7 @@ class NotificationAction {
     );
   }
 
-  /// Helper getter
+  /// Helper to check if this action is a "Reply" button.
   bool get isReplyAction => inputs.isNotEmpty;
 }
 

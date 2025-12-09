@@ -1,6 +1,9 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'smart_notification_listener_method_channel.dart';
 
+/// The interface that implementations of smart_notification_listener must implement.
+/// 
+/// Platform implementations should extend this class rather than implementing it as an interface.
 abstract class SmartNotificationListenerPlatform extends PlatformInterface {
   SmartNotificationListenerPlatform() : super(token: _token);
 
@@ -9,8 +12,10 @@ abstract class SmartNotificationListenerPlatform extends PlatformInterface {
   static SmartNotificationListenerPlatform _instance =
       MethodChannelSmartNotificationListener();
 
+  /// The default instance of [SmartNotificationListenerPlatform] to use.
   static SmartNotificationListenerPlatform get instance => _instance;
 
+  /// Platform-specific implementations should set this with their own platform-specific class.
   static set instance(SmartNotificationListenerPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
@@ -41,9 +46,14 @@ abstract class SmartNotificationListenerPlatform extends PlatformInterface {
     throw UnimplementedError('stopNotificationService() has not been implemented.');
   }
 
+  // Add this method to your class
+  Future<void> disconnect() async {
+    throw UnimplementedError('disconnect() has not been implemented.');
+  }
+
   /// Restart the Android notification listener service
-  Future<bool> restartNotificationService() {
-    throw UnimplementedError('restartNotificationService() has not been implemented.');
+  Future<bool> forceReconnect() {
+    throw UnimplementedError('forceReconnect() has not been implemented.');
   }
 
   /// Check whether notification listener permission is granted.
@@ -51,7 +61,7 @@ abstract class SmartNotificationListenerPlatform extends PlatformInterface {
     throw UnimplementedError('hasPermission() has not been implemented.');
   }
 
-  /// Send a reply to a notification (simple)
+  /// Send a reply to a notification
   Future<bool> sendReply({
     required String id,
     required String message,
