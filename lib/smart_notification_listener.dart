@@ -17,6 +17,9 @@ class SmartNotificationListener {
   /// A broadcast stream of notifications received from the Android service.
   static const EventChannel _eventChannel = EventChannel('smart_notification_listener_event');
 
+  /// Internal cache for the stream to prevent constant reconnection.
+  Stream<SmartNotification>? _notificationStream;
+
   /// A broadcast stream of incoming notifications.
   /// 
   /// This stream transforms the raw map data from Android into 
@@ -25,27 +28,35 @@ class SmartNotificationListener {
   /// It also handles special status messages (like 'connected') by returning
   /// an empty notification with the packageName set to the status.
   Stream<SmartNotification> get notifications {
-    return _eventChannel.receiveBroadcastStream().map((event) {
-      try {
-        // 1. Check if event is a MAP (Actual Notification)
-        if (event is Map) {
-          final map = Map<String, dynamic>.from(event);
-          return SmartNotification.fromMap(map);
-        } 
-        
-        // 2. Check if event is a STRING (Status message like "connected")
-        if (event is String) {
-          debugPrint("🔔 Native Status Event: $event");
-          // Return a special empty notification to signal status change
-          return SmartNotification.empty()..packageName = event;
-        }
+    // FIX: Only create the stream once. 
+    // This prevents the "Sink detached/attached" loop when the UI rebuilds.
+    _notificationStream ??= _eventChannel
+        .receiveBroadcastStream()
+        .map((event) {
+          try {
+            // 1. Check if event is a MAP (Actual Notification)
+            if (event is Map) {
+              final map = Map<String, dynamic>.from(event);
+              return SmartNotification.fromMap(map);
+            } 
+            
+            // 2. Check if event is a STRING (Status message like "connected")
+            if (event is String) {
+              debugPrint("🔔 Native Status Event: $event");
+              // Return a special empty notification to signal status change
+              return SmartNotification.empty()..packageName = event;
+            }
 
-        return SmartNotification.empty();
-      } catch (e, stackTrace) {
-        debugPrint('Failed to parse SmartNotification: $e\n$stackTrace');
-        return SmartNotification.empty();
-      }
-    });
+            return SmartNotification.empty();
+          } catch (e, stackTrace) {
+            debugPrint('Failed to parse SmartNotification: $e\n$stackTrace');
+            return SmartNotification.empty();
+          }
+        })
+        // Ensure multiple listeners can subscribe (e.g., UI and Logic)
+        .asBroadcastStream();
+
+    return _notificationStream!;
   }
 
   /// Opens the Android system settings screen where the user can grant 
@@ -59,7 +70,7 @@ class SmartNotificationListener {
     return SmartNotificationListenerPlatform.instance.isNotificationServiceRunning();
   }
 
-  // Commands the Android service to start.
+  /// Commands the Android service to start.
   Future<bool> startNotificationService() {
     return SmartNotificationListenerPlatform.instance.startNotificationService();
   }
