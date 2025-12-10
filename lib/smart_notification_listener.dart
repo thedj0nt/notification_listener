@@ -35,7 +35,7 @@ class SmartNotificationListener {
             final map = Map<String, dynamic>.from(event);
             notification = SmartNotification.fromMap(map);
           } else if (event is String) {
-            debugPrint("🔔 Native Status Event: $event");
+            // debugPrint("🔔 Native Status Event: $event");
             notification = SmartNotification.empty()..packageName = event;
           }
 

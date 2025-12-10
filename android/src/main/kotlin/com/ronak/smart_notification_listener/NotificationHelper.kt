@@ -21,10 +21,10 @@ object NotificationHelper {
         mainHandler.post {
             eventSink = sink
             if (sink != null) {
-                Log.d("NLS", "✅ Sink attached. Flushing ${eventQueue.size} buffered events.")
+                // Log.d("NLS", "✅ Sink attached. Flushing ${eventQueue.size} buffered events.")
                 flushQueue()
             } else {
-                Log.d("NLS", "🔌 Sink detached. Buffering events.")
+                // Log.d("NLS", "🔌 Sink detached. Buffering events.")
             }
         }
     }
@@ -50,15 +50,15 @@ object NotificationHelper {
         mainHandler.post {
             if (eventSink != null) {
                 try {
-                    Log.d("NLS", "🚀 Sending to Flutter: $data") // <--- ADD THIS
+                    // Log.d("NLS", "🚀 Sending to Flutter: $data") // <--- ADD THIS
                     eventSink?.success(data)
                 } catch (e: Exception) {
-                    Log.w("NLS", "Sink failed, switching to buffer: ${e.message}")
+                    // Log.w("NLS", "Sink failed, switching to buffer: ${e.message}")
                     eventSink = null
                     addToBuffer(data)
                 }
             } else {
-                Log.d("NLS", "⚠️ Sink is NULL. Buffering event.") // <--- ADD THIS
+                // Log.d("NLS", "⚠️ Sink is NULL. Buffering event.") // <--- ADD THIS
                 addToBuffer(data)
             }
         }

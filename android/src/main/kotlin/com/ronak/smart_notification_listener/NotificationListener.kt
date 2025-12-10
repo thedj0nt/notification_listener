@@ -71,7 +71,7 @@ class NotificationListener : NotificationListenerService() {
         super.onListenerConnected()
         instance = this
         isRunning = true
-        Log.d("NLS", "Service Connected")
+        // Log.d("NLS", "Service Connected")
         NotificationHelper.sendEvent("connected")
     }
 
@@ -79,13 +79,13 @@ class NotificationListener : NotificationListenerService() {
         super.onListenerDisconnected()
         instance = null
         isRunning = false
-        Log.d("NLS", "Service Disconnected")
+        // Log.d("NLS", "Service Disconnected")
         NotificationHelper.sendEvent("disconnected")
     }
 
     // Triggered by the OS whenever a new notification arrives
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        Log.d("NLS", "🔔 OS POSTED NOTIFICATION: ${sbn?.packageName}")
+        // Log.d("NLS", "🔔 OS POSTED NOTIFICATION: ${sbn?.packageName}")
         if (sbn == null) return
         
         
