@@ -67,17 +67,21 @@ class SmartNotificationListener {
     return SmartNotificationListenerPlatform.instance.isNotificationServiceRunning();
   }
 
-  /// Commands the Android service to start.
+  /// Asks Android to bind the notification listener (API 24+ uses
+  /// `NotificationListenerService.requestRebind`); on older APIs falls back
+  /// to a component toggle. Requires notification access; does not open settings.
   Future<bool> startNotificationService() {
     return SmartNotificationListenerPlatform.instance.startNotificationService();
   }
 
-  /// Commands the Android service to stop.
+  /// Requests unbind from the listener service while it is connected (API 24+).
+  /// Returns false if the service is not running or on API levels below 24.
   Future<bool> stopNotificationService() {
     return SmartNotificationListenerPlatform.instance.stopNotificationService();
   }
 
-  /// Disconnects the method channel connection.
+  /// Cancels this plugin's [EventChannel] subscription and clears the native
+  /// event sink so notifications buffer until you listen to [notifications] again.
   Future<void> disconnect() async {
     // Only here do we actually kill the native connection
     await _nativeSubscription?.cancel();

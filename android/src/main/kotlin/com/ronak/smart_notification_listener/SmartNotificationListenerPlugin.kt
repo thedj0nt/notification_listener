@@ -72,6 +72,17 @@ class SmartNotificationListenerPlugin : FlutterPlugin,
                 NotificationListener.forceReconnect(context)
                 result.success(true)
             }
+            "startNotificationService" -> {
+                NotificationListener.requestBind(context)
+                result.success(true)
+            }
+            "stopNotificationService" -> {
+                result.success(NotificationListener.requestUnbindIfBound())
+            }
+            "disconnect" -> {
+                NotificationHelper.setSink(null)
+                result.success(null)
+            }
             "sendReply" -> {
                 val id = call.argument<String>("id")
                 val message = call.argument<String>("message")

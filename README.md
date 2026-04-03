@@ -28,29 +28,16 @@ dependencies:
 ---
 
 ## 📱 Android Setup
-# 1. Add required permissions in AndroidManifest.xml
-In android/app/src/main/AndroidManifest.xml, add the following inside the <manifest> tag:
 
-```xml
-<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-<uses-permission android:name="android.permission.WAKE_LOCK"/>
-```
+### Notification listener service (no manual manifest entry)
 
-# 2. Register the service
-Inside the <application> tag, add:
+The plugin ships a `NotificationListenerService` entry in its own `AndroidManifest.xml`. Flutter **merges** that into your app, so you should **not** declare the same `<service>` again in `android/app/src/main/AndroidManifest.xml` (duplicate entries cause manifest merger errors).
 
-```xml
-<service
-    android:name="com.ronak.smart_notification_listener.NotificationListener"
-    android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.service.notification.NotificationListenerService" />
-    </intent-filter>
-</service>
-```
+Do **not** add `android.permission.BIND_NOTIFICATION_LISTENER_SERVICE` as a `<uses-permission>`; that permission is system-only. Binding is enforced with `android:permission` on the merged `<service>` declaration.
 
-# 3. Enable Kotlin (only if not already enabled)
+At runtime, the user must enable **Notification access** for your app (`openNotificationSettings()`). Optional extras such as `RECEIVE_BOOT_COMPLETED` or `WAKE_LOCK` are only needed if **you** add a `BroadcastReceiver` or other components; they are not required by this plugin alone.
+
+### Enable Kotlin (only if not already enabled)
 Ensure Kotlin is set up in your app. If you're using a recent version of Flutter and the Android Gradle Plugin, Kotlin is likely already enabled.
 
 A. If using the older Gradle setup (build.gradle):
@@ -217,8 +204,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
 | Method                             | Description                                                |
 | ---------------------------------- | ---------------------------------------------------------- |
-| `startNotificationService()`       | Commands the background service to start.        |
-| `stopNotificationService()`        | Stops the background service.                                           |
+| `startNotificationService()`       | Asks the system to bind the listener (API 24+ `requestRebind`; below 24 uses a component toggle). Requires notification access. |
+| `stopNotificationService()`        | Calls `requestUnbind()` while connected (API 24+); returns `false` if not bound or on API &lt; 24. |
+| `disconnect()`                     | Cancels the plugin's `EventChannel` subscription and clears the native sink (events buffer until you listen to `notifications` again). |
 | `isNotificationServiceRunning()`   | Returns true if the service is currently active.             |
 | `forceReconnect()`   | Crucial: Toggles the component state to force Android to restart the service (fixes "silent kills").             |
 | `openNotificationSettings()`       | Opens Android's Notification Access settings screen.       |

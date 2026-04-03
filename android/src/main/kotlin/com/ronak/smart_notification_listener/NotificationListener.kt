@@ -2,15 +2,16 @@ package com.ronak.smart_notification_listener
 
 import android.app.Notification
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.app.RemoteInput
 import android.content.Context
 import android.content.ComponentName
-import android.service.notification.NotificationListenerService
+import android.service.notification.NotificationListenerService as AndroidNotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 
-class NotificationListener : NotificationListenerService() {
+class NotificationListener : AndroidNotificationListenerService() {
 
     companion object {
         var isRunning: Boolean = false
@@ -64,6 +65,33 @@ class NotificationListener : NotificationListenerService() {
             pm.setComponentEnabledSetting(componentName, 
                 android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 
                 android.content.pm.PackageManager.DONT_KILL_APP)
+        }
+
+        /**
+         * Asks the system to bind the notification listener (API 24+).
+         * On older APIs, falls back to [forceReconnect].
+         */
+        fun requestBind(context: Context) {
+            val component = ComponentName(context, NotificationListener::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                AndroidNotificationListenerService.requestRebind(component)
+            } else {
+                forceReconnect(context)
+            }
+        }
+
+        /** Requests unbind while the service is connected (API 24+ only). */
+        fun requestUnbindIfBound(): Boolean {
+            val service = instance ?: return false
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+            return try {
+                // Stubs may expose void or boolean; treat no exception as success.
+                service.requestUnbind()
+                true
+            } catch (e: Exception) {
+                Log.e("NLS", "requestUnbind failed: ${e.message}")
+                false
+            }
         }
     }
 
