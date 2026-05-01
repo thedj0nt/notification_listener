@@ -1,3 +1,5 @@
-## 0.0.1
+## 1.0.0
 
-* TODO: Describe initial release.
+* Initial release of the Smart Notification Listener.
+* Support for intercepting Android system notifications via native Kotlin bridges.
+* Optimized background memory execution to prevent battery drain.
