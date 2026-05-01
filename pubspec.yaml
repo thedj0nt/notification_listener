@@ -1,8 +1,9 @@
 name: smart_notification_listener
-description: "A new Flutter plugin project."
+description: A high-performance Flutter plugin for intercepting and processing Android system notifications via native Kotlin bridges, optimized for background memory and battery efficiency.
 version: 1.0.0
 # homepage:
-repository: https://example.com/smart_notification_listener
+homepage: https://github.com/thedj0nt/notification_listener
+repository: https://github.com/thedj0nt/notification_listener
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
